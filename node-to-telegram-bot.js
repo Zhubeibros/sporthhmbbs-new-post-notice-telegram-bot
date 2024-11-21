@@ -4,7 +4,7 @@ const axios = require('axios');
 // Telegram Bot 配置
 const TELEGRAM_TOKEN = '2033272917:AAERLMr-WD9DXkSyKctgt6GzajKE3ugIqc4';
 const TELEGRAM_CHAT_ID = '-1001572303287';
-const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: false });
+const bot = new TelegramBot(TELEGRAM_TOKEN, { polling: true });
 
 // NodeBB API 配置
 const NODEBB_URL = 'https://sporthhmbbs.xyz';
@@ -31,14 +31,49 @@ async function fetchRecentPosts() {
 
 // 發送 Telegram 通知
 async function sendTelegramNotification(post) {
+    // 獲取作者的頭貼 URL
+    const avatarUrl = post.user.picture || 'default_avatar_url'; // 替換為默認頭貼 URL
+
+    // 構建消息內容
     const message = `
-📢 新文章通知
 作者: ${post.user.username}
 標題: ${post.title}
 連結: ${NODEBB_URL}/topic/${post.slug}
     `;
-    await bot.sendMessage(TELEGRAM_CHAT_ID, message);
+
+    // 發送頭貼和消息
+    await bot.sendPhoto(TELEGRAM_CHAT_ID, avatarUrl, { caption: message });
 }
+
+// 發佈內容到 NodeBB
+async function postToNodeBB(username, topicId, content, imageUrl) {
+    try {
+        const response = await axios.post(`${NODEBB_URL}/api/v1/topics/${topicId}/posts`, {
+            content: content,
+            // 如果有圖片，根據 NodeBB API 的要求進行調整
+            // image: imageUrl // 根據 NodeBB API 的要求進行調整
+        }, {
+            headers: {
+                Authorization: `Bearer ${NODEBB_API_TOKEN}`, // 使用 NodeBB API Token
+                'Content-Type': 'application/json',
+            },
+        });
+        console.log('成功發佈到 NodeBB:', response.data);
+    } catch (error) {
+        console.error('發佈到 NodeBB 失敗:', error);
+    }
+}
+
+// 接收 Telegram 消息
+bot.on('message', async (msg) => {
+    const chatId = msg.chat.id;
+
+    // 假設消息格式為 "username, topic id, content, image_url"
+    const [username, topicId, content, imageUrl] = msg.text.split(',');
+
+    // 調用發佈函數
+    await postToNodeBB(username.trim(), topicId.trim(), content.trim(), imageUrl ? imageUrl.trim() : null);
+});
 
 // 定時檢查新文章
 async function checkForNewPosts() {
